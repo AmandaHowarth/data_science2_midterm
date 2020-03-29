@@ -1,0 +1,25 @@
+---
+title: "data_science2_midterm"
+author: "Amanda Howarth"
+date: "3/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+#import and clean data 
+deleted any variables listed twice in data set 
+```{r}
+discharge_data = read_csv() %>% 
+  janitor::clean_names() %>%
+  mutate(birthweight = as.numeric(birthweight)) %>% 
+select(-ccs_diagnosis_description, -ccs_procedure_description, -apr_drg_description, -apr_mdc_description, -apr_severity_of_illness_description, -facility_name)
+
+```
