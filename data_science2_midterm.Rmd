@@ -12,14 +12,46 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(dplyr)
+library(sqldf)
+library(caret)
 ```
 
 #import and clean data 
-deleted any variables listed twice in data set 
 ```{r}
-discharge_data = read_csv() %>% 
+discharge_data = read_csv("./data/Hospital_Inpatient_Discharges__SPARCS_De-Identified___2013-4.csv") %>%
   janitor::clean_names() %>%
-  mutate(birthweight = as.numeric(birthweight)) %>% 
-select(-ccs_diagnosis_description, -ccs_procedure_description, -apr_drg_description, -apr_mdc_description, -apr_severity_of_illness_description, -facility_name)
-
+  mutate(birth_weight = as.numeric(birth_weight)) %>% 
+  mutate(length_of_stay = as.numeric(length_of_stay)) %>% 
+  janitor::clean_names() %>%
+select(-ccs_diagnosis_description, -ccs_procedure_code, -ccs_procedure_description, -apr_drg_description, -apr_mdc_description, -apr_severity_of_illness_description, -facility_id, -payment_typology_2, -payment_typology_3, -zip_code_3_digits, -discharge_year, -health_service_area, -operating_certificate_number, -abortion_edit_indicator, -patient_disposition, -age_group, -apr_drg_code, -apr_mdc_code) %>% 
+  filter(type_of_admission != "Not Available", payment_typology_1 != "Unknown", payment_typology_1 != "Miscellaneous/Other", apr_medical_surgical_description != "Not Applicable") %>% 
+        mutate(ccs = ifelse(ccs_diagnosis_code %in% 1:10, "infectious_disease", 
+                      ifelse(ccs_diagnosis_code %in% 11:47, "cancer",
+                      ifelse(ccs_diagnosis_code %in% 48:58, "endocrine_metabolic_disease",
+                      ifelse(ccs_diagnosis_code %in% 59:64, "blood_diseases",
+                      ifelse(ccs_diagnosis_code %in% 76:95, "nervous_system_disease",
+                      ifelse(ccs_diagnosis_code %in% 96:121, "circulatory_sysytem_disease",
+                      ifelse(ccs_diagnosis_code %in% 122:134, "respiratory_disease",
+                      ifelse(ccs_diagnosis_code %in% 135:155, "digestive_disease", 
+                      ifelse(ccs_diagnosis_code %in% 156:166, "genitourinary_disease", 
+                      ifelse(ccs_diagnosis_code %in% 167:196, "pregnancy_childbirth_complication",
+                      ifelse(ccs_diagnosis_code %in% 197:200, "skin_disease", 
+                      ifelse(ccs_diagnosis_code %in% 201:212, "musculoskeletal_disease",
+                      ifelse(ccs_diagnosis_code %in% 213:217, "congenital_anomalies",
+                      ifelse(ccs_diagnosis_code %in% 218:224, "perinatal_condition",
+                      ifelse(ccs_diagnosis_code %in% 225:244, "injury_poisoning",
+                      ifelse(ccs_diagnosis_code %in% 650:663, "mental_disorder", "other"))))))))))))))))) %>% 
+  select(-ccs_diagnosis_code) %>% 
+  na.omit()
 ```
+dropped 119 people with missing values (121539 --> 121420)
+
+
+
+
+
+
+
+
+
+
