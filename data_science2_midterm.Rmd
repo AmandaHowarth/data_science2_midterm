@@ -258,8 +258,8 @@ ggplot(pcr.fit, highlight = TRUE) + theme_bw()
 predictions <- pcr.fit %>% predict(x2)
 
 
-importance = varImp(pcr.fit, scale=FALSE)
-importance
+var_import = varImp(pcr.fit, scale=FALSE)
+
 ```
 
 Lastly, we fit a principle component regression (PCR) model on the training data with M chosen by cross validation. The PCR method constructs the first M principal components and then uses the componenets as the predictors in a linear regression model. Our M-value was 87 and our test error (MSE) was 937635353. The RMSE was 30620.83
