@@ -18,6 +18,9 @@ library(ModelMetrics)
 library(ISLR)
 library(pls)
 library(mgcv)
+library(microbenchmark)
+library(stargazer)
+library(viridis)
 ```
 # Background / Motivation
 Total hospital charges vary greatly for patients across the United States. In 2012, it was estimated that the mean hospital cost per stay was $10,400 (Moore et al., 2014). However, the cost per stay varies by different factors, including a patient's demographic information (such as age), the severity of their health condition, and type of admission. The cost of having a baby as well as the cost of infant hospitalizations also differ based on many different factors. In 2004, March of Dimes reported that the average cost of having a baby was $8,802. This cost varies by factors such as type of birth, whether it be a Cesarean-section of vaginal birth ($10,958 vs $7,737) (March of Dimes, 2004). This cost is also affected by the birthweight of the newborn, with the average cost per stay increasing to $15,100 for pre-term/low birthweight babies (Russell et al, 2007). For babies born at a weight less than 1000 grams, the average cost of hospital stay is reported to be $65,600 (Russell et al, 2007).
@@ -30,9 +33,15 @@ In order to load the dataset to my computer, this dataset was limited (through t
 
 Nineteen variables were dropped from the dataset. Twelve of the remaining variables were categorical variables, and four were continuous variables. All categorical variables were turned into dummy variables with referent groups. The final dataset used for models in this analysis included 92 predictors and 1 response variable (total charges).
 
+Our research questions are the following: 
+•	Which approach (linear regression, lasso regression, ridge regression, principle component regression, or generalized additive model) best predicts a patient’s total healthcare costs per stay in New York? 
+•	What is the RMSE of each model? 
+•	What percent of the variance in total healthcare costs is explained by the predictors available in SPARCS? 
+•	Is there multicollinearity among variables? 
+
 # Import and clean data 
 ```{r}
-discharge_data = read_csv("") %>%
+discharge_data = read_csv("./data/Hospital_Inpatient_Discharges__SPARCS_De-Identified___2013-4.csv") %>%
   janitor::clean_names() %>%
   mutate(birth_weight = as.numeric(birth_weight)) %>% 
   mutate(length_of_stay = as.numeric(length_of_stay)) %>% 
@@ -59,71 +68,60 @@ select(-ccs_diagnosis_description, -ccs_procedure_code, -ccs_procedure_descripti
   na.omit()
 ```
 
-# Exploratory analysis 
+# Exploratory Analysis Findings / Visualization 
+This dataset inlcudes 121,380 patients with birthweight information recorded at their hospital visit. The mean total charges for a patient at discharge across the 49 hospital facilities is $19,787.95. The median total charges for a patient is $6590.02. The median total charges vary across the 49 facilities inlcuded in this analysis. The median total charges for a patient at discharge were highest at Montefiore Medical Center - Henry & Lucy Moses Div ($25,160.36) and lowest at North Central Bronx Hospital ($2,407.01) (Table 1). 
 
-#Number of Babies born by borough
+The total charges also vary by the patient's severity of illness (1 = least severe, 4 = most severe). Figure 1 demonstrates that the median total charges increase with each increase in severity score, reaching the highest charges for those with a severity of illness score  of 4 ($240,749.50). This can be compared to the median total charges of patients with the lowest severity of illness score ($6,149.32). 
+
+Lastly, in Figure 2, one can see that the total charges decrease across increasing birthweight. Thus, patients who have lower birthweights pay the highest total charges at discharge. 
+
+# Table 1 
 ```{r}
-#baby count by borough
-babies_by_borough = discharge_data %>% 
-  select(hospital_county, id) %>% 
-  group_by(hospital_county) %>% 
-  summarise_(n= ~n()) %>%
-  mutate(percentage= prop.table(n)*100)
-babies_by_borough
-
-#gender by borough
-gender_by_borough = discharge_data %>% 
-  select(hospital_county, id, gender) %>% 
-  group_by(hospital_county, gender) %>% 
-  summarise_(n= ~n())
-gender_by_borough
-
-#bar graph: gender count by borough
-ggplot(data= gender_by_borough, aes(x= hospital_county, y=n, fill=gender)) +
-geom_bar(stat="identity", position=position_dodge())
-
-#number of babies per hospitl
-babies_by_hospital = discharge_data %>% 
-  select(facility_name, id) %>% 
-  group_by(facility_name) %>% 
-  summarise_(n= ~n())
-babies_by_hospital
-
-#charges by hospital 
+#Table 1. Median Total Charges by Hospital Facility
 charges_by_hospital = discharge_data %>% 
   select(facility_name, total_charges, hospital_county) %>% 
   group_by(facility_name, hospital_county) %>% 
-  summarize(average_charge = mean(total_charges)) %>%
-  arrange(desc(average_charge))
+  summarize(median_charge = median(total_charges)) %>%
+  arrange(desc(median_charge))
 charges_by_hospital
 
-#compare to total mean = $19,787.95
+stargazer(charges_by_hospital)
+
+#mean total charges = $19,787.95
 mean(discharge_data$total_charges)
 
-#charges by severity of illness  
-charges_by_severity = discharge_data %>% 
-  select(apr_severity_of_illness_code, total_charges, id) %>% 
-  group_by(apr_severity_of_illness_code) %>% 
-  summarize(average_charge = mean(total_charges)) %>%
-  arrange(desc(average_charge))
-charges_by_severity
-
-#use in line code to get number of individuals with each severity
-
+#median total charges =$6590.02
+median(discharge_data$total_charges)
 ```
 
-In this dataset, 121,380 newborns born in 2013 across the 5 boroughs of New York City were analyzed. 
-____ hopsitals 
-____ females and males 
-- by borough 
-- by hopsital 
+# Figures 1 and 2
+```{r}
+# Creating dataset for Figure 1
+charges_by_severity = discharge_data %>% 
+  select(apr_severity_of_illness_code, total_charges) %>% 
+  group_by(apr_severity_of_illness_code) %>% 
+  summarize(median_charge = median(total_charges)) %>%
+  arrange(desc(median_charge))
+charges_by_severity
+
+ggplot(charges_by_severity, aes(x = apr_severity_of_illness_code, y = median_charge, fill = apr_severity_of_illness_code)) + geom_bar(stat = "identity") + labs(title = "Figure 1. Median Total Charges Across Severity fo Ilnness in New York City Hospitals, 2013", 
+           x = "Baby Birthweight",
+           y = "Total Charges")
+
+ggplot(discharge_data, aes(x = birth_weight, y = total_charges)) + 
+  geom_point(na.rm = TRUE) +
+  labs(title = "Figure 2. Total Charges Across Values of Baby Birthweight in New York City Hospitals, 2013", 
+           x = "Baby Birthweight",
+           y = "Total Charges")
+```
+
 
 # Making categorical varaibles into dummy variables 
 ```{r}
 cat_dummies = dummyVars(" ~ .", data = discharge_data, fullRank = T)
 discharge_data2 = data.frame(predict(cat_dummies, newdata = discharge_data))
 ```
-factor them??
+
 
 # Partitioning data into test and training data
 ```{r}
@@ -140,7 +138,18 @@ y <- discharge_data2$total_charges[trRows]
 # matrix of predictors & vector of response (test data)
 x2 <- model.matrix(total_charges~., discharge_data2)[-trRows,-1]
 y2 <- discharge_data2$total_charges[-trRows]
+
+corrplot(cor(x), method = "square", type = "full")
 ```
+
+# MODELS 
+What predictor variables did you include?
+What technique did you use? What assumptions, if any, are being made by using this technique?
+If there were tuning parameters, how did you pick their values?
+Discuss the training/test performance if you have a test data set.
+Which variables play important roles in predicting the response?
+What are the limitations of the models you used (if there are any)? Are the models flexible enough to capture the underlying truth?
+
 
 # LINEAR MODEL 
 Fitting a linear model using least squares on the training data and calculating the mean square error using the test data.
@@ -165,6 +174,32 @@ R square=  0.8568802  (training data)
 
 MSE for test data: 937604771
 RMSE for test data: 30620.33
+
+# RIDGE REGRESSION
+```{r}
+set.seed(100)
+ridge.fit <- train(x, y,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(alpha = 0, 
+                                          lambda = exp(seq(-50, 50, length=100))), 
+                   preProc = c("center", "scale"),
+                   trControl = ctrl1)
+ridge.fit
+
+plot(ridge.fit, xTrans = function(x) log(x))
+
+#lambda value 
+ridge.fit$bestTune 
+
+#model coefficients 
+coef(ridge.fit$finalModel,ridge.fit$bestTune$lambda) 
+
+
+#test error 
+pred_ridge <- predict(ridge.fit, x)
+mse(y, pred_ridge)
+rmse(y, pred_ridge)
+```
 
 
 # LASSO MODEL
@@ -193,8 +228,12 @@ coef(lasso.fit$finalModel,lasso.fit$bestTune$lambda)
 pred_lasso <- predict(lasso.fit, newdata = x2)
 mse(y2, pred_lasso)
 rmse(y2, pred_lasso)
+
+
 ```
+
 We found the test erorr (MSE) to be 937116653 with a lambda value of 28.03162. The RMSE value is 30612.36
+
 
 # PCR MODEL
 ```{r}
@@ -210,16 +249,25 @@ pcr.fit
 pcr.fit$bestTune
 
 #test error 
-pred_pcr <- predict(pcr.fit, x2)
+pred_pcr <- predict(pcr.fit, x2, ncomp = 87)
 mse(y2, pred_pcr)
+rmse(y2, pred_pcr)
 
+summary(pcr.fit)
 ggplot(pcr.fit, highlight = TRUE) + theme_bw()
+predictions <- pcr.fit %>% predict(x2)
+
+
+importance = varImp(pcr.fit, scale=FALSE)
+importance
 ```
+
+Lastly, we fit a principle component regression (PCR) model on the training data with M chosen by cross validation. The PCR method constructs the first M principal components and then uses the componenets as the predictors in a linear regression model. Our M-value was 87 and our test error (MSE) was 937635353. The RMSE was 30620.83
 
 # GAM MODEL
 ```{r}
 
-seed(100) 
+set.seed(100) 
 gam.m1 <- gam(total_charges~ s(length_of_stay)+s(birth_weight)+s(total_costs), data = discharge_data2)
 
 plot(gam.m1)
@@ -236,7 +284,19 @@ gam.fit$bestTune
 
 gam.fit$finalModel
 
+pred_gam <- predict(gam.fit, x2)
+mse(y2, pred_gam)
+rmse(y2, pred_gam)
+summary(gam.fit)
+
+
 ```
+
+GCV score: 820127821   
+R-sq.(adj) =  0.852
+
+MSE = 969194746
+RMSE = 31131.89
 
 include summaries of each model so u can report R^2
 also choose top 5 important variables in best datsaset
@@ -245,8 +305,12 @@ also choose top 5 important variables in best datsaset
 ```{r, fig.width=5}
 resamp <- resamples(list(lm = fit_lm, 
                          lasso = lasso.fit, 
-                         gam = gam.m1))
+                         pcr = pcr.fit, 
+                         gam = gam.fit,
+                         ridge = ridge.fit))
 
+bwplot(resamp, metric = "RMSE")
+bwplot(resamp, metric = "MAE")
 # need to include "pcr = pcr.fit" once u get PCR to run
 
 summary(resamp)
@@ -256,4 +320,4 @@ summary(resamp)
 
 ```
 
-
+include references
