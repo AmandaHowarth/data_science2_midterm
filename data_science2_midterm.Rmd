@@ -14,11 +14,25 @@ library(tidyverse)
 library(dplyr)
 library(sqldf)
 library(caret)
+library(ModelMetrics)
+library(ISLR)
+library(pls)
+library(mgcv)
 ```
+# Background / Motivation
+Total hospital charges vary greatly for patients across the United States. In 2012, it was estimated that the mean hospital cost per stay was $10,400 (Moore et al., 2014). However, the cost per stay varies by different factors, including a patient's demographic information (such as age), the severity of their health condition, and type of admission. The cost of having a baby as well as the cost of infant hospitalizations also differ based on many different factors. In 2004, March of Dimes reported that the average cost of having a baby was $8,802. This cost varies by factors such as type of birth, whether it be a Cesarean-section of vaginal birth ($10,958 vs $7,737) (March of Dimes, 2004). This cost is also affected by the birthweight of the newborn, with the average cost per stay increasing to $15,100 for pre-term/low birthweight babies (Russell et al, 2007). For babies born at a weight less than 1000 grams, the average cost of hospital stay is reported to be $65,600 (Russell et al, 2007).
 
-#import and clean data 
+The ability to predict the total cost of a patient’s stay at a hospital based on known patient characteristics, hospital information, and diagnosis would provide significant benefits for health insurance companies, patients, and hospitals. If a soon-to-be mother was informed of the predicted charges of her upcoming birth at different hospitals, she would be better informed in choosing which hospital she would like to be admitted to. Additionally, a newborn/infant's parent can choose a hospital that is best for their family economically if their child is having health complications. 
+
+The goal of this analysis is to determine the best model to predict the total healthcare charges of newborn and infant patients who were admitted to hospitals in New York City. We used the Hospital Inpatient Discharges (SPARCS De-Identified) 2013 data set. This data was provided by the New York State Department of Health’s Office of Quality and Patient Safety and includes 2.43 million observations and 34 variables, such as features for demographic information, hospital stay, payment typology, cost information. 
+
+In order to load the dataset to my computer, this dataset was limited (through the NY State's website filtering option) to the hospital service area of New York City and includes information from hospitals in all five boroughs. The dataset was also limited to include only patients who had birthweight information available, recorded during their hospital stay. Over 150+ CCS diagnosis codes were included in the original dataset. The diagnosis codes were categorized into 17 diagnosis types, such as "infectious diseases" and" pregnancy and childbirth complications." Individuals with missing values (n = 119) were dropped from the dataset, totaling 121,380 patients in the final dataset. 
+
+Nineteen variables were dropped from the dataset. Twelve of the remaining variables were categorical variables, and four were continuous variables. All categorical variables were turned into dummy variables with referent groups. The final dataset used for models in this analysis included 92 predictors and 1 response variable (total charges).
+
+# Import and clean data 
 ```{r}
-discharge_data = read_csv() %>%
+discharge_data = read_csv("") %>%
   janitor::clean_names() %>%
   mutate(birth_weight = as.numeric(birth_weight)) %>% 
   mutate(length_of_stay = as.numeric(length_of_stay)) %>% 
@@ -44,14 +58,202 @@ select(-ccs_diagnosis_description, -ccs_procedure_code, -ccs_procedure_descripti
   select(-ccs_diagnosis_code) %>% 
   na.omit()
 ```
-dropped 119 people with missing values (121539 --> 121420)
+
+# Exploratory analysis 
+
+#Number of Babies born by borough
+```{r}
+#baby count by borough
+babies_by_borough = discharge_data %>% 
+  select(hospital_county, id) %>% 
+  group_by(hospital_county) %>% 
+  summarise_(n= ~n()) %>%
+  mutate(percentage= prop.table(n)*100)
+babies_by_borough
+
+#gender by borough
+gender_by_borough = discharge_data %>% 
+  select(hospital_county, id, gender) %>% 
+  group_by(hospital_county, gender) %>% 
+  summarise_(n= ~n())
+gender_by_borough
+
+#bar graph: gender count by borough
+ggplot(data= gender_by_borough, aes(x= hospital_county, y=n, fill=gender)) +
+geom_bar(stat="identity", position=position_dodge())
+
+#number of babies per hospitl
+babies_by_hospital = discharge_data %>% 
+  select(facility_name, id) %>% 
+  group_by(facility_name) %>% 
+  summarise_(n= ~n())
+babies_by_hospital
+
+#charges by hospital 
+charges_by_hospital = discharge_data %>% 
+  select(facility_name, total_charges, hospital_county) %>% 
+  group_by(facility_name, hospital_county) %>% 
+  summarize(average_charge = mean(total_charges)) %>%
+  arrange(desc(average_charge))
+charges_by_hospital
+
+#compare to total mean = $19,787.95
+mean(discharge_data$total_charges)
+
+#charges by severity of illness  
+charges_by_severity = discharge_data %>% 
+  select(apr_severity_of_illness_code, total_charges, id) %>% 
+  group_by(apr_severity_of_illness_code) %>% 
+  summarize(average_charge = mean(total_charges)) %>%
+  arrange(desc(average_charge))
+charges_by_severity
+
+#use in line code to get number of individuals with each severity
+
+```
+
+In this dataset, 121,380 newborns born in 2013 across the 5 boroughs of New York City were analyzed. 
+____ hopsitals 
+____ females and males 
+- by borough 
+- by hopsital 
+
+# Making categorical varaibles into dummy variables 
+```{r}
+cat_dummies = dummyVars(" ~ .", data = discharge_data, fullRank = T)
+discharge_data2 = data.frame(predict(cat_dummies, newdata = discharge_data))
+```
+factor them??
+
+# Partitioning data into test and training data
+```{r}
+set.seed(100)
+trRows <- createDataPartition(discharge_data2$total_charges,
+                              p = .75,
+                              list = FALSE)
+## p = 0.75 means u are taking 75% of the data and thus, 25% is the test set and 75% is ur training set
+
+# matrix of predictors & vector of response (training data)
+x <- model.matrix(total_charges~.,discharge_data2)[trRows,-1]
+y <- discharge_data2$total_charges[trRows]
+
+# matrix of predictors & vector of response (test data)
+x2 <- model.matrix(total_charges~., discharge_data2)[-trRows,-1]
+y2 <- discharge_data2$total_charges[-trRows]
+```
+
+# LINEAR MODEL 
+Fitting a linear model using least squares on the training data and calculating the mean square error using the test data.
+```{r}
+set.seed(100)
+ctrl1 <- trainControl(method = "cv", number = 10)
+
+fit_lm <- train(total_charges~., 
+                data = discharge_data2[trRows,-1], 
+                method = "lm", 
+                trControl = ctrl1)
+fit_lm
+
+summary(fit_lm)
+
+#test error 
+pred_lm <- predict(fit_lm, discharge_data2[-trRows, -1])
+mse(y2, pred_lm)
+rmse(y2, pred_lm)
+```
+R square=  0.8568802  (training data)
+
+MSE for test data: 937604771
+RMSE for test data: 30620.33
+
+
+# LASSO MODEL
+Fiting a lasso model on the training data, with λ chosen by cross-validation. Report the test error, along with the number of non-zero coefficient estimates.
+```{r}
+set.seed(100)
+lasso.fit <- train(x, y,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(alpha = 1, 
+                                          lambda = exp(seq(-10, 10, length=100))),
+                   preProc = c("center", "scale"),
+                   trControl = ctrl1)
+lasso.fit
+
+plot(lasso.fit, xTrans = function(x) log(x))
+
+
+
+#lamda value 
+lasso.fit$bestTune
+
+#model coefficients 
+coef(lasso.fit$finalModel,lasso.fit$bestTune$lambda)
+
+#test error 
+pred_lasso <- predict(lasso.fit, newdata = x2)
+mse(y2, pred_lasso)
+rmse(y2, pred_lasso)
+```
+We found the test erorr (MSE) to be 937116653 with a lambda value of 28.03162. The RMSE value is 30612.36
+
+# PCR MODEL
+```{r}
+set.seed(100)
+pcr.fit <-train(x, y,
+                method = "pcr",
+                tuneGrid  =data.frame(ncomp = 1:92), 
+                trControl = ctrl1,
+               preProc =c("center", "scale"))
+pcr.fit 
+
+#M value
+pcr.fit$bestTune
+
+#test error 
+pred_pcr <- predict(pcr.fit, x2)
+mse(y2, pred_pcr)
+
+ggplot(pcr.fit, highlight = TRUE) + theme_bw()
+```
+
+# GAM MODEL
+```{r}
+
+seed(100) 
+gam.m1 <- gam(total_charges~ s(length_of_stay)+s(birth_weight)+s(total_costs), data = discharge_data2)
+
+plot(gam.m1)
+
+vis.gam(gam.m1, view = c("f_undergrad","p_undergrad"), 
+        plot.type = "contour", color = "topo")
+
+gam.fit <- train(x, y,
+                 method = "gam",
+                 tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE,FALSE)),
+                 trControl = ctrl1)
+
+gam.fit$bestTune
+
+gam.fit$finalModel
+
+```
+
+include summaries of each model so u can report R^2
+also choose top 5 important variables in best datsaset
+
+# Choosing best model to predict total healthcare charges 
+```{r, fig.width=5}
+resamp <- resamples(list(lm = fit_lm, 
+                         lasso = lasso.fit, 
+                         gam = gam.m1))
+
+# need to include "pcr = pcr.fit" once u get PCR to run
+
+summary(resamp)
 
 
 
 
-
-
-
-
+```
 
 
