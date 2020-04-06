@@ -46,7 +46,7 @@ Our research questions were the following:
 
 # Import and clean data 
 ```{r}
-discharge_data = read_csv("./data/Hospital_Inpatient_Discharges__SPARCS_De-Identified___2013-4.csv") %>%
+discharge_data = read_csv() %>%
   janitor::clean_names() %>%
   mutate(birth_weight = as.numeric(birth_weight)) %>% 
   mutate(length_of_stay = as.numeric(length_of_stay)) %>% 
